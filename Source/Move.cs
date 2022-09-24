@@ -11,7 +11,6 @@ namespace Rune
 		public int StartingPosition;
 		public int TargetPosition;
 		public int Priority;
-		public bool IsCapture = false;
 	}
 
 	public class MoveString

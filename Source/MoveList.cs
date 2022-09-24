@@ -22,7 +22,6 @@ namespace Rune
 			{
 				mid = (low + high) / 2;
 
-
 				if (this._moves[mid].Priority > move.Priority)
 				{
 					low = mid + 1;

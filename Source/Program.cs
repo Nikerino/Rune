@@ -34,7 +34,9 @@ while (run)
 			string turn = tokens[1];
 			int colorToMove = turn == "w" ? Piece.White : Piece.Black;
 			Board board = Board.FromFen(fen);
+			board.Print();
 			Move bestMove = Engine.GetBestMove(board, colorToMove);
+			board.Print();
 			client.Send(Encoding.UTF8.GetBytes(MoveString.FromMove(bestMove)));
 			break;
 	}

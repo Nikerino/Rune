@@ -28,7 +28,7 @@ namespace Rune
 				Move move = moves[i];
 				board.MakeMove(move);
 				float score = Engine.Minimax(board, Engine.lookaheadDepth - 1, xside, alpha, beta);
-				board.UnmakeMove(move);
+				board.UnmakeMove();
 				if (side == Engine.maxPlayer)
 				{
 					if (score > bestScore)
@@ -74,7 +74,7 @@ namespace Rune
 					Move move = legalMoves[i];
 					board.MakeMove(move);
 					float evaluation = Engine.Minimax(board, lookaheadDepth - 1, Engine.minPlayer, alpha, beta);
-					board.UnmakeMove(move);
+					board.UnmakeMove();
 					if (evaluation > bestEvaluation)
 					{ 
 						bestEvaluation = evaluation;
@@ -99,7 +99,7 @@ namespace Rune
 					Move move = legalMoves[i];
 					board.MakeMove(move);
 					float evaluation = Engine.Minimax(board, lookaheadDepth - 1, Engine.maxPlayer, alpha, beta);
-					board.UnmakeMove(move);
+					board.UnmakeMove();
 					if (evaluation < bestEvaluation)
 					{
 						bestEvaluation = evaluation;
