@@ -37,15 +37,9 @@ namespace Rune
 			91, 92, 93, 94, 95, 96, 97, 98
 		};
 
-		private int[] piece = new int[64];
+		private int[] pieces = new int[64];
 
-		private int[] color = new int[64];
-
-		private int[] movesMade = new int[64];
-
-		private Stack<int> capturedPieces = new Stack<int>(32);
-
-		private Stack<int> capturedColors = new Stack<int>(32);
+		private Stack<BoardState> savedStates = new Stack<BoardState>(32);
 
 		public static Board FromFen(string fen)
 		{
@@ -62,16 +56,18 @@ namespace Rune
 						for (int i = 0; i < numEmpty; i++)
 						{
 							int square = Board.TranslateRankAndFileToSquare(rank, file);
-							newBoard.piece[square] = Piece.Empty;
-							newBoard.color[square] = Piece.Empty;
+							newBoard.pieces[square] = Piece.Empty;
 							file++;
 						}
 					}
 					else
 					{
 						int square = Board.TranslateRankAndFileToSquare(rank, file);
-						newBoard.piece[square] = Piece.TypeFromChar(rankString[rankItem]);
-						newBoard.color[square] = Piece.ColorFromChar(rankString[rankItem]);
+						int piece = Piece.Empty;
+						piece = Piece.SetExists(piece, true);
+						piece = Piece.SetType(piece, Piece.TypeFromChar(rankString[rankItem]));
+						piece = Piece.SetColor(piece, Piece.ColorFromChar(rankString[rankItem]));
+						newBoard.pieces[square] = piece;
 						file++;
 					}
 				}
@@ -86,69 +82,79 @@ namespace Rune
 		{
 			float whiteScore = 0;
 			float blackScore = 0;
-			for (int i = 0; i < this.piece.Length; i++)
+			for (int i = 0; i < this.pieces.Length; i++)
 			{
-				if (this.color[i] == Piece.White)
+				int piece = this.pieces[i];
+				if (Piece.GetExists(piece))
 				{
-					whiteScore += Piece.Values[this.piece[i]];
-				}
-				else if (this.color[i] == Piece.Black)
-				{
-					blackScore += Piece.Values[this.piece[i]];
+					if (Piece.GetColor(piece) == Piece.White)
+					{
+						whiteScore += Piece.Values[Piece.GetType(piece)];
+					}
+					else
+					{
+						blackScore += Piece.Values[Piece.GetType(piece)];
+					}
 				}
 			}
+
+			whiteScore += this.GetAllMovesForColor(Piece.White).Length / 100f;
+			blackScore += this.GetAllMovesForColor(Piece.Black).Length / 100f;
+
 			return whiteScore - blackScore;
 		}
 
 		// ========================================
 		// Move Making
 		// ========================================
-		public void MakeMove(Move move)
+		private void saveState()
 		{
-			if (move.IsCapture)
-			{
-				this.capturedPieces.Push(this.piece[move.TargetPosition]);
-				this.capturedColors.Push(this.color[move.TargetPosition]);
+			BoardState state = new BoardState();
+			for (int i = 0; i < this.pieces.Length; i++)
+			{ 
+				state.Pieces[i] = this.pieces[i];
 			}
-			this.piece[move.TargetPosition] = this.piece[move.StartingPosition];
-			this.color[move.TargetPosition] = this.color[move.StartingPosition];
-			this.piece[move.StartingPosition] = Piece.Empty;
-			this.color[move.StartingPosition] = Piece.Empty;
-			this.movesMade[move.TargetPosition]++;
+			this.savedStates.Push(state);
 		}
 
-		public void UnmakeMove(Move move)
+		private void restoreState()
+		{ 
+			BoardState state = this.savedStates.Pop();
+			for (int i = 0; i < this.pieces.Length; i++)
+			{
+				this.pieces[i] = state.Pieces[i];
+			}
+		}
+
+		public void MakeMove(Move move)
 		{
-			this.piece[move.StartingPosition] = this.piece[move.TargetPosition];
-			this.color[move.StartingPosition] = this.color[move.TargetPosition];
-			if (move.IsCapture)
-			{
-				this.piece[move.TargetPosition] = this.capturedPieces.Pop();
-				this.color[move.TargetPosition] = this.capturedColors.Pop();
-			}
-			else
-			{
-				this.piece[move.TargetPosition] = Piece.Empty;
-				this.color[move.TargetPosition] = Piece.Empty;
-			}
-			this.movesMade[move.TargetPosition]--;
+			this.saveState();
+			int piece = this.pieces[move.StartingPosition];
+			piece = Piece.SetHasMoved(piece, true);
+			this.pieces[move.TargetPosition] = piece;
+			this.pieces[move.StartingPosition] = Piece.Empty;
+		}
+
+		public void UnmakeMove()
+		{
+			this.restoreState();
 		}
 
 		public bool IsMoveLegal(Move move)
 		{
-			int side = this.color[move.StartingPosition];
+			int side = Piece.GetColor(this.pieces[move.StartingPosition]);
 			int xside = side == Piece.White ? Piece.Black : Piece.White;
 			this.MakeMove(move);
 			MoveList opposingMoves = this.GetAllMovesForColor(xside);
 			for (int i = 0; i < opposingMoves.Length; i++)
 			{
-				if (this.piece[opposingMoves[i].TargetPosition] == Piece.King)
+				if (Piece.GetType(this.pieces[opposingMoves[i].TargetPosition]) == Piece.King)
 				{
-					this.UnmakeMove(move);
+					this.UnmakeMove();
 					return false;
 				}
 			}
-			this.UnmakeMove(move);
+			this.UnmakeMove();
 			return true;
 		}
 
@@ -163,14 +169,12 @@ namespace Rune
 		public void Print()
 		{
 			Console.WriteLine("===============");
-			string rankString = string.Empty;
 			for (int rank = 0; rank < 8; rank++)
 			{
 				for (int file = 0; file < 8; file++)
 				{
 					int square = Board.TranslateRankAndFileToSquare(rank, file);
-					Console.Write(this.color[square]);
-					Console.Write(this.piece[square]);
+					Console.Write(this.pieces[square]);
 					Console.Write(' ');
 				}
 				Console.WriteLine();
@@ -199,34 +203,35 @@ namespace Rune
 		public MoveList GetAllMovesForColor(int side)
 		{
 			int xside = side == Piece.White ? Piece.Black : Piece.White;
-			int pawnYMultiplier = side - xside;
+			int pawnYMultiplier = side == Piece.White ? -1 : 1;
 			MoveList allMoves = new MoveList();
 			for (int startSquare = 0; startSquare < 64; startSquare++) // For each square in the board
 			{
-				if (this.color[startSquare] == side) // If the current square is the moving color
+				int piece = this.pieces[startSquare]; // Get piece at square
+				if (Piece.GetExists(piece) && Piece.GetColor(piece) == side) // If the current square is the moving color
 				{
-					int piece = this.piece[startSquare]; // Get piece at square
-					if (piece != Piece.Pawn) // Pawns have a weird moveset, so we do them separately
+					int pieceType = Piece.GetType(piece);
+					if (pieceType != Piece.Pawn) // Pawns have a weird moveset, so we do them separately
 					{
-						for (int offsetIndex = 0; offsetIndex < Piece.Offsets[piece].Length; offsetIndex++)
+						for (int offsetIndex = 0; offsetIndex < Piece.Offsets[pieceType].Length; offsetIndex++)
 						{
-							if (Piece.Offsets[piece][offsetIndex] == 0) { break; } // There are no more offsets for this piece to traverse
+							if (Piece.Offsets[pieceType][offsetIndex] == 0) { break; } // There are no more offsets for this.pieces to traverse
 							for (int targetSquare = startSquare;;)
 							{
 								// mailbox64 gives us the the target square as a mailbox120 index. We add the offset to that index
 								// which is already in mailbox120 format. If the number at that mailbox120 index is a -1, then we know
 								// that we are out of bounds, so we simply break because we cannot move to that offset / in that direction.
-								targetSquare = this.mailbox120[this.mailbox64[targetSquare] + Piece.Offsets[piece][offsetIndex]];
+								targetSquare = this.mailbox120[this.mailbox64[targetSquare] + Piece.Offsets[pieceType][offsetIndex]];
 								if (targetSquare == -1) { break; }
-								if (this.piece[targetSquare] != Piece.Empty)
+								int targetPiece = this.pieces[targetSquare];
+								if (Piece.GetExists(targetPiece))
 								{
-									if (this.color[targetSquare] == xside)
+									if (Piece.GetColor(targetPiece) == xside)
 									{
 										Move captureMove = new Move();
 										captureMove.StartingPosition = startSquare;
 										captureMove.TargetPosition = targetSquare;
-										captureMove.Priority = Piece.Values[this.piece[targetSquare]];
-										captureMove.IsCapture = true;
+										captureMove.Priority = Piece.Values[Piece.GetType(targetPiece)];
 										allMoves.Insert(captureMove);
 									}
 									break;
@@ -239,7 +244,7 @@ namespace Rune
 								// If the piece is non-sliding, then we break here, because we no longer need to look in that direction.
 								// Otherwise, we continue with this loop, and keep incrememnting target square by the same offset
 								// until we can slide no longer.
-								if (!Piece.Slides[piece]) { break; }
+								if (!Piece.Slides[pieceType]) { break; }
 							}
 						}
 					}
@@ -247,7 +252,7 @@ namespace Rune
 					{
 						// check pushes first
 						int targetSquare = this.mailbox120[this.mailbox64[startSquare] + (10 * pawnYMultiplier)];
-						if (targetSquare != -1 && this.piece[targetSquare] == Piece.Empty)
+						if (targetSquare != -1 && !Piece.GetExists(this.pieces[targetSquare]))
 						{
 							Move move = new Move();
 							move.StartingPosition = startSquare;
@@ -255,7 +260,7 @@ namespace Rune
 							move.Priority = 0;
 							allMoves.Insert(move);
 							targetSquare = this.mailbox120[this.mailbox64[targetSquare] + (10 * pawnYMultiplier)];
-							if (this.movesMade[startSquare] == 0 && targetSquare != -1 && this.piece[targetSquare] == Piece.Empty)
+							if (!Piece.GetHasMoved(pieceType) && targetSquare != -1 && !Piece.GetExists(this.pieces[targetSquare]))
 							{
 								move = new Move();
 								move.StartingPosition = startSquare;
@@ -266,28 +271,35 @@ namespace Rune
 						}
 						// Now check pawn attacks
 						targetSquare = this.mailbox120[this.mailbox64[startSquare] + (11 * pawnYMultiplier)];
-						if (targetSquare != -1 && this.color[targetSquare] == xside)
+						if (targetSquare != -1 && Piece.GetExists(this.pieces[targetSquare]) && Piece.GetColor(this.pieces[targetSquare]) == xside)
 						{
 							Move move = new Move();
 							move.StartingPosition = startSquare;
 							move.TargetPosition = targetSquare;
-							move.Priority = Piece.Values[this.piece[targetSquare]];
-							move.IsCapture = true;
+							move.Priority = Piece.Values[Piece.GetType(this.pieces[targetSquare])];
+							allMoves.Insert(move);
 						}
 
 						targetSquare = this.mailbox120[this.mailbox64[startSquare] + (9 * pawnYMultiplier)];
-						if (targetSquare != -1 && this.color[targetSquare] == xside)
+						if (targetSquare != -1 && Piece.GetExists(this.pieces[targetSquare]) && Piece.GetColor(this.pieces[targetSquare]) == xside)
 						{
 							Move move = new Move();
 							move.StartingPosition = startSquare;
 							move.TargetPosition = targetSquare;
-							move.Priority = Piece.Values[this.piece[targetSquare]];
-							move.IsCapture = true;
+							move.Priority = Piece.Values[Piece.GetType(this.pieces[targetSquare])];
+							allMoves.Insert(move);
 						}
 					}
 				}
 			}
 			return allMoves;
 		}
+	}
+
+	struct BoardState
+	{
+		public int[] Pieces = new int[64];
+
+		public BoardState() { }
 	}
 }
